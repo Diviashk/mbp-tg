@@ -115,10 +115,17 @@ class ApiService {
 
   // ======================================
   // SUBMIT ABSENCE TO employee_availability
-  // WITH UPSERT (merge with existing dates)
+  // WITH DETAILED LOGGING
   // ======================================
   async submitAbsence(absence: Absence) {
     try {
+      console.log("📝 Starting absence submission...");
+      console.log("Employee ID:", absence.employeeId);
+      console.log("Start Date:", absence.startDate);
+      console.log("End Date:", absence.endDate);
+      console.log("Reason:", absence.reason);
+      console.log("Custom Reason:", absence.customReason);
+
       const start = absence.startDate;
       const end = absence.endDate ?? absence.startDate;
 
@@ -126,7 +133,13 @@ class ApiService {
       const month = `${start.slice(0, 7)}-01`;
       const notes = absence.customReason || absence.reason || null;
 
+      console.log("📅 Calculated values:");
+      console.log("New dates (CSV):", newDates);
+      console.log("Month:", month);
+      console.log("Notes:", notes);
+
       // First, check if record exists for this employee+month
+      console.log("🔍 Checking for existing record...");
       const { data: existing, error: fetchError } = await supabase
         .from("employee_availability")
         .select("id, absence_dates, notes")
@@ -135,61 +148,85 @@ class ApiService {
         .maybeSingle();
 
       if (fetchError) {
-        console.error("Error checking existing record:", fetchError);
+        console.error("❌ Error checking existing record:", fetchError);
         throw new Error(fetchError.message);
       }
 
+      console.log("Existing record:", existing);
+
       if (existing) {
+        console.log("✏️ Updating existing record ID:", existing.id);
+        
         // Record exists - MERGE dates
         const existingDates = existing.absence_dates ? existing.absence_dates.split(",").map(d => d.trim()) : [];
         const newDatesList = newDates.split(",").map(d => d.trim());
         
+        console.log("Existing dates:", existingDates);
+        console.log("New dates:", newDatesList);
+        
         // Combine and remove duplicates
         const mergedDatesSet = new Set([...existingDates, ...newDatesList]);
         const mergedDates = Array.from(mergedDatesSet).sort().join(",");
+        
+        console.log("Merged dates:", mergedDates);
         
         // Combine notes
         const combinedNotes = existing.notes 
           ? `${existing.notes}; ${notes}` 
           : notes;
 
-        // UPDATE existing record (without updated_at)
-        const { error: updateError } = await supabase
+        console.log("Combined notes:", combinedNotes);
+
+        // UPDATE existing record
+        const { data: updateData, error: updateError } = await supabase
           .from("employee_availability")
           .update({
             absence_dates: mergedDates,
             notes: combinedNotes
           })
-          .eq("id", existing.id);
+          .eq("id", existing.id)
+          .select();
+
+        console.log("Update result:", updateData);
 
         if (updateError) {
-          console.error("Error updating absence:", updateError);
+          console.error("❌ Error updating absence:", updateError);
           throw new Error(updateError.message);
         }
 
+        console.log("✅ Successfully updated existing record");
         return { success: true, message: "Absence dates added successfully" };
 
       } else {
-        // No existing record - INSERT new one
-        const { error: insertError } = await supabase
+        console.log("➕ Inserting new record...");
+        
+        const insertData = {
+          employee_id: absence.employeeId,
+          month,
+          absence_dates: newDates,
+          notes
+        };
+
+        console.log("Insert data:", insertData);
+
+        const { data: insertResult, error: insertError } = await supabase
           .from("employee_availability")
-          .insert({
-            employee_id: absence.employeeId,
-            month,
-            absence_dates: newDates,
-            notes
-          });
+          .insert(insertData)
+          .select();
+
+        console.log("Insert result:", insertResult);
 
         if (insertError) {
-          console.error("Error inserting absence:", insertError);
+          console.error("❌ Error inserting absence:", insertError);
           throw new Error(insertError.message);
         }
 
+        console.log("✅ Successfully inserted new record");
         return { success: true, message: "Absence submitted successfully" };
       }
 
     } catch (err: any) {
-      console.error("Unexpected absence submit error:", err);
+      console.error("💥 Unexpected absence submit error:", err);
       throw err;
     }
   }
