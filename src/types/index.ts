@@ -1,8 +1,6 @@
 // Type definitions for the Shift Spark Telegram Mini App
 
-export type ShiftType = 'morning' | 'evening' | 'night';
-
-export type DayOfWeek = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+export type ShiftType = 'morning' | 'night';
 
 export interface Shift {
   id: string;
@@ -28,12 +26,6 @@ export interface Absence {
   status?: 'pending' | 'approved' | 'rejected';
 }
 
-export interface ShiftPreference {
-  employeeId: string;
-  shiftType: ShiftType;
-  days: DayOfWeek[];
-}
-
 export interface Employee {
   id: string;
   telegramUserId: number;
@@ -41,7 +33,7 @@ export interface Employee {
   upcomingShifts: Shift[];
 }
 
-export type Screen = 'home' | 'report-absence' | 'update-preference' | 'confirmation';
+export type Screen = 'home' | 'report-absence';
 
 export interface AppState {
   currentScreen: Screen;
