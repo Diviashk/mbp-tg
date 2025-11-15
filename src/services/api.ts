@@ -134,71 +134,72 @@ class ApiService {
   // ABSENCES
   // ============================================================
 
-  async submitAbsence(absence: Absence): Promise<{ success: boolean; message: string }> {
-    try {
-      const start = absence.startDate;
-      const end = absence.endDate ?? absence.startDate;
-      const absenceDates = datesBetween(start, end);
+ async submitAbsence(absence: Absence): Promise<{ success: boolean; message: string }> {
+  try {
+    const start = absence.startDate;
+    const end = absence.endDate ?? absence.startDate;
+    const absenceDates = datesBetween(start, end);
 
-      const month = `${new Date(start).getFullYear()}-${String(
-        new Date(start).getMonth() + 1
-      ).padStart(2, '0')}-01`;
+    // month stored as YYYY-MM-01
+    const month = `${new Date(start).getFullYear()}-${String(
+      new Date(start).getMonth() + 1
+    ).padStart(2, '0')}-01`;
 
-      const notes = absence.customReason || absence.reason || null;
+    const notes = absence.customReason || absence.reason || null;
 
-      const { error } = await supabase
-        .from('absences')
-        .insert({
-          employee_id: absence.employeeId,
-          month,
-          absence_dates: absenceDates,
-          notes,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error submitting absence:', error);
-        throw new Error(error.message || 'Failed to submit absence');
-      }
-
-      return {
-        success: true,
-        message: 'Absence submitted successfully',
-      };
-    } catch (err: any) {
-      console.error('submitAbsence unexpected error:', err);
-      throw new Error(err?.message || 'Failed to submit absence');
-    }
-  }
-
-  async getAbsences(employeeId: string): Promise<Absence[]> {
-    const { data, error } = await supabase
-      .from('absences')
-      .select('*')
-      .eq('employee_id', employeeId)
-      .order('created_at', { ascending: false });
+    const { error } = await supabase
+      .from('employee_availability')
+      .insert({
+        employee_id: absence.employeeId,
+        month,
+        absence_dates: absenceDates,
+        notes,
+      })
+      .select()
+      .single();
 
     if (error) {
-      console.error('Error fetching absences:', error);
-      throw new Error(error.message || 'Failed to fetch absences');
+      console.error("Error submitting absence:", error);
+      throw new Error(error.message || "Failed to submit absence");
     }
 
-    return (data || []).map((row: any) => {
-      const parsed = parseAbsenceDates(row.absence_dates);
-      return {
-        id: row.id,
-        employeeId: row.employee_id,
-        startDate: parsed.startDate,
-        endDate: parsed.endDate,
-        absenceDates: parsed.dates,
-        reason: row.notes || null,
-        customReason: row.notes || null,
-        status: row.status || null,
-        createdAt: row.created_at || null,
-      } as Absence;
-    });
+    return {
+      success: true,
+      message: "Absence submitted successfully",
+    };
+  } catch (err: any) {
+    console.error("submitAbsence unexpected error:", err);
+    throw new Error(err?.message || "Failed to submit absence");
   }
+}
+
+async getAbsences(employeeId: string): Promise<Absence[]> {
+  const { data, error } = await supabase
+    .from('employee_availability')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error("Error fetching absences:", error);
+    throw new Error(error.message || "Failed to fetch absences");
+  }
+
+  return (data || []).map((row: any) => {
+    const parsed = parseAbsenceDates(row.absence_dates);
+
+    return {
+      id: row.id,
+      employeeId: row.employee_id,
+      startDate: parsed.startDate,
+      endDate: parsed.endDate,
+      absenceDates: parsed.dates,
+      reason: row.notes || null,
+      customReason: row.notes || null,
+      status: null,
+      createdAt: row.created_at,
+    };
+  });
 }
 
 export const apiService = new ApiService();
