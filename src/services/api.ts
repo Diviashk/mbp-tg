@@ -20,7 +20,7 @@ class ApiService {
         *,
         shifts:shifts(*)
       `)
-      .eq('telegram_user_id', telegramUserId)
+     .eq('telegram_user_id', String(telegramUserId))
       .single();
 
     if (error) {
