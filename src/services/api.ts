@@ -59,6 +59,7 @@ class ApiService {
           assigned_at,
           status,
           skill_level,
+          role,
           shifts (
             id,
             date,
@@ -76,16 +77,31 @@ class ApiService {
       throw new Error(error.message || 'Employee not found');
     }
 
-    const employeeId = (data as any).id;
-    const assignments = ((data as any).shift_assignments || []).filter(
-      (a: any) => a && String(a.employee_id) === String(employeeId)
-    );
+    // Normalize shift_assignments into array (some drivers may return single object)
+    let rawAssignments: any = (data as any).shift_assignments;
+    if (!rawAssignments) rawAssignments = [];
+    if (!Array.isArray(rawAssignments)) {
+      // wrap single object into array
+      console.warn('Normalized single shift_assignments object into array', rawAssignments);
+      rawAssignments = [rawAssignments];
+    }
 
-    // Map assignments -> shifts, preserve assignment-level info and include role fallback
+    const employeeId = (data as any).id;
+
+    const assignments = rawAssignments.filter((a: any) => a && String(a.employee_id) === String(employeeId));
+
+    // Map assignments -> shifts, but normalize a.shifts into array if needed
     const upcomingShifts = assignments
       .flatMap((a: any) => {
-        const shifts = a.shifts || [];
-        return shifts.map((shift: any) => ({
+        let shiftsRaw = a.shifts;
+        if (!shiftsRaw) return []; // no shifts on this assignment
+        if (!Array.isArray(shiftsRaw)) {
+          // sometimes nested result is a single object — normalize
+          console.warn('Normalized single shifts object into array for assignment', { assignmentId: a.id, shiftsRaw });
+          shiftsRaw = [shiftsRaw];
+        }
+
+        return shiftsRaw.map((shift: any) => ({
           id: shift.id,
           date: shift.date,
           type: shift.shift_type,
@@ -96,7 +112,6 @@ class ApiService {
           assignedAt: a.assigned_at,
           assignmentStatus: a.status,
           skillLevel: a.skill_level,
-          // role: prefer a.role if present, otherwise a.status or 'assigned'
           role: (a as any).role ?? a.status ?? 'assigned',
         }));
       })
@@ -119,17 +134,13 @@ class ApiService {
   }
 
   // Absence endpoints
-  // submitAbsence writes to your existing absences table (month, absence_dates, notes)
   async submitAbsence(absence: Absence): Promise<{ success: boolean; message: string }> {
-    // Expect absence to have: employeeId (uuid), startDate (YYYY-MM-DD), endDate (YYYY-MM-DD), reason, customReason
+    // If your absences table uses month + absence_dates + notes, adapt accordingly.
     try {
       const start = absence.startDate;
       const end = absence.endDate ?? absence.startDate;
       const absenceDates = datesBetween(start, end);
-
-      // month stored as first day of month (YYYY-MM-01)
       const month = `${new Date(start).getFullYear()}-${String(new Date(start).getMonth() + 1).padStart(2, '0')}-01`;
-
       const notes = absence.customReason || absence.reason || null;
 
       const { data, error } = await supabase
@@ -158,7 +169,6 @@ class ApiService {
     }
   }
 
-  // getAbsences: returns raw absence_dates and compatibility fields startDate/endDate
   async getAbsences(employeeId: string): Promise<Absence[]> {
     const { data, error } = await supabase
       .from('absences')
@@ -176,12 +186,9 @@ class ApiService {
       return {
         id: row.id,
         employeeId: row.employee_id,
-        // compatibility: return first and last date if UI expects start/end
         startDate: parsed.startDate,
         endDate: parsed.endDate,
-        // preserve the raw CSV too
         absenceDates: parsed.dates,
-        // map notes -> reason/customReason fields for compatibility
         reason: row.notes || null,
         customReason: row.notes || null,
         status: row.status || null,
