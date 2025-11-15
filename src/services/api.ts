@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Absence, ShiftPreference, Employee } from '../types';
+import { Absence, Employee } from '../types';
 
 // Initialize Supabase client
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -49,29 +49,6 @@ class ApiService {
     };
   }
 
-  async getUpcomingShifts(employeeId: string): Promise<Employee['upcomingShifts']> {
-    const { data, error } = await supabase
-      .from('shifts')
-      .select('*')
-      .eq('employee_id', employeeId)
-      .gte('date', new Date().toISOString().split('T')[0])
-      .order('date', { ascending: true })
-      .limit(5);
-
-    if (error) {
-      console.error('Error fetching shifts:', error);
-      throw new Error('Failed to fetch shifts');
-    }
-
-    return (data || []).map(shift => ({
-      id: shift.id,
-      date: shift.date,
-      type: shift.shift_type,
-      startTime: shift.start_time,
-      endTime: shift.end_time,
-    }));
-  }
-
   // Absence endpoints
   async submitAbsence(absence: Absence): Promise<{ success: boolean; message: string }> {
     const { data, error } = await supabase
@@ -118,57 +95,6 @@ class ApiService {
       reason: absence.reason,
       customReason: absence.custom_reason,
       status: absence.status,
-    }));
-  }
-
-  // Preference endpoints
-  async updatePreferences(
-    employeeId: string,
-    preferences: ShiftPreference[]
-  ): Promise<{ success: boolean; message: string }> {
-    // First, delete existing preferences for this employee
-    await supabase
-      .from('shift_preferences')
-      .delete()
-      .eq('employee_id', employeeId);
-
-    // Then insert new preferences
-    const preferencesToInsert = preferences.map(pref => ({
-      employee_id: pref.employeeId,
-      shift_type: pref.shiftType,
-      days: pref.days,
-    }));
-
-    const { error } = await supabase
-      .from('shift_preferences')
-      .insert(preferencesToInsert);
-
-    if (error) {
-      console.error('Error updating preferences:', error);
-      throw new Error('Failed to update preferences');
-    }
-
-    return {
-      success: true,
-      message: 'Preferences updated successfully',
-    };
-  }
-
-  async getPreferences(employeeId: string): Promise<ShiftPreference[]> {
-    const { data, error } = await supabase
-      .from('shift_preferences')
-      .select('*')
-      .eq('employee_id', employeeId);
-
-    if (error) {
-      console.error('Error fetching preferences:', error);
-      throw new Error('Failed to fetch preferences');
-    }
-
-    return (data || []).map(pref => ({
-      employeeId: pref.employee_id,
-      shiftType: pref.shift_type,
-      days: pref.days,
     }));
   }
 }
