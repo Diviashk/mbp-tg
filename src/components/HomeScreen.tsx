@@ -6,7 +6,7 @@ import { useTelegram } from '../hooks/useTelegram';
 
 interface HomeScreenProps {
   employee: Employee | null;
-  onNavigate: (screen: 'report-absence' | 'update-preference') => void;
+  onNavigate: (screen: 'report-absence') => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ employee, onNavigate }) => {
@@ -15,11 +15,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ employee, onNavigate }) 
   const handleReportAbsence = () => {
     hapticFeedback.light();
     onNavigate('report-absence');
-  };
-
-  const handleUpdatePreference = () => {
-    hapticFeedback.light();
-    onNavigate('update-preference');
   };
 
   const getShiftTime = (shift: Employee['upcomingShifts'][0]) => {
@@ -39,20 +34,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ employee, onNavigate }) 
           <p className="text-tg-hint">Manage your shift schedule</p>
         </div>
 
-        {/* Main Actions */}
+        {/* Main Action */}
         <div className="space-y-4">
           <TouchButton
             icon="📅"
             label="Report Absence"
             onClick={handleReportAbsence}
             variant="primary"
-          />
-          
-          <TouchButton
-            icon="⭐"
-            label="Update Preference"
-            onClick={handleUpdatePreference}
-            variant="secondary"
           />
         </div>
 
@@ -86,10 +74,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ employee, onNavigate }) 
           </div>
         )}
 
-        {/* Quick Info */}
+        {/* Info Card */}
         <div className="bg-tg-secondary-bg rounded-2xl p-4 mt-6">
           <p className="text-sm text-tg-hint text-center">
-            💡 Tap any button to update your availability or preferences
+            💡 Need to report an absence? Tap the button above to let your manager know.
           </p>
         </div>
       </div>
