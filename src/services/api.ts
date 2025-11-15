@@ -12,7 +12,7 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl || '', supabaseKey || '');
 
-// Helper: generate comma-separated list of YYYY-MM-DD between start and end (inclusive)
+// Helper: create comma-separated date list
 function datesBetween(startDate: string, endDate: string): string {
   const s = new Date(startDate);
   const e = new Date(endDate);
@@ -26,23 +26,26 @@ function datesBetween(startDate: string, endDate: string): string {
   return dates.join(',');
 }
 
-// Helper: parse comma-separated absence_dates into array and compute start/end
+// Helper: parse absence_dates
 function parseAbsenceDates(datesCsv: string | null | undefined) {
   if (!datesCsv) return { dates: [], startDate: null, endDate: null };
   const parts = datesCsv
     .split(',')
     .map(s => s.trim())
     .filter(Boolean)
-    .sort(); // lexicographic YYYY-MM-DD sorts correctly
+    .sort();
   return {
     dates: parts,
-    startDate: parts.length ? parts[0] : null,
-    endDate: parts.length ? parts[parts.length - 1] : null,
+    startDate: parts[0] || null,
+    endDate: parts[parts.length - 1] || null,
   };
 }
 
 class ApiService {
-  // Employee endpoints
+  // ============================================================
+  // EMPLOYEE + UPCOMING SHIFTS
+  // ============================================================
+
   async getEmployee(telegramUserId: number | string): Promise<Employee> {
     const tgid = String(telegramUserId);
 
@@ -59,7 +62,6 @@ class ApiService {
           assigned_at,
           status,
           skill_level,
-          role,
           shifts (
             id,
             date,
@@ -77,29 +79,22 @@ class ApiService {
       throw new Error(error.message || 'Employee not found');
     }
 
-    // Normalize shift_assignments into array (some drivers may return single object)
-    let rawAssignments: any = (data as any).shift_assignments;
-    if (!rawAssignments) rawAssignments = [];
-    if (!Array.isArray(rawAssignments)) {
-      // wrap single object into array
-      console.warn('Normalized single shift_assignments object into array', rawAssignments);
-      rawAssignments = [rawAssignments];
-    }
+    // Normalize shift_assignments to array
+    let rawAssignments: any = (data as any).shift_assignments || [];
+    if (!Array.isArray(rawAssignments)) rawAssignments = [rawAssignments];
 
-    const employeeId = (data as any).id;
+    const employeeId = data.id;
 
-    const assignments = rawAssignments.filter((a: any) => a && String(a.employee_id) === String(employeeId));
+    const assignments = rawAssignments.filter(
+      (a: any) => a && String(a.employee_id) === String(employeeId)
+    );
 
-    // Map assignments -> shifts, but normalize a.shifts into array if needed
+    // Flatten shifts from assignments
     const upcomingShifts = assignments
       .flatMap((a: any) => {
         let shiftsRaw = a.shifts;
-        if (!shiftsRaw) return []; // no shifts on this assignment
-        if (!Array.isArray(shiftsRaw)) {
-          // sometimes nested result is a single object — normalize
-          console.warn('Normalized single shifts object into array for assignment', { assignmentId: a.id, shiftsRaw });
-          shiftsRaw = [shiftsRaw];
-        }
+        if (!shiftsRaw) return [];
+        if (!Array.isArray(shiftsRaw)) shiftsRaw = [shiftsRaw];
 
         return shiftsRaw.map((shift: any) => ({
           id: shift.id,
@@ -107,15 +102,17 @@ class ApiService {
           type: shift.shift_type,
           startTime: shift.start_time,
           endTime: shift.end_time,
-          // assignment-level metadata
           assignmentId: a.id,
           assignedAt: a.assigned_at,
           assignmentStatus: a.status,
           skillLevel: a.skill_level,
-          role: (a as any).role ?? a.status ?? 'assigned',
+
+          // Derived role (since DB has no `role` column)
+          role: a.status ?? 'assigned',
         }));
       })
       .filter((shift: any) => {
+        // Future or today
         const shiftDate = new Date(shift.date);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -133,17 +130,23 @@ class ApiService {
     };
   }
 
-  // Absence endpoints
+  // ============================================================
+  // ABSENCES
+  // ============================================================
+
   async submitAbsence(absence: Absence): Promise<{ success: boolean; message: string }> {
-    // If your absences table uses month + absence_dates + notes, adapt accordingly.
     try {
       const start = absence.startDate;
       const end = absence.endDate ?? absence.startDate;
       const absenceDates = datesBetween(start, end);
-      const month = `${new Date(start).getFullYear()}-${String(new Date(start).getMonth() + 1).padStart(2, '0')}-01`;
+
+      const month = `${new Date(start).getFullYear()}-${String(
+        new Date(start).getMonth() + 1
+      ).padStart(2, '0')}-01`;
+
       const notes = absence.customReason || absence.reason || null;
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('absences')
         .insert({
           employee_id: absence.employeeId,
@@ -164,7 +167,7 @@ class ApiService {
         message: 'Absence submitted successfully',
       };
     } catch (err: any) {
-      console.error('submitAbsence - unexpected error:', err);
+      console.error('submitAbsence unexpected error:', err);
       throw new Error(err?.message || 'Failed to submit absence');
     }
   }
