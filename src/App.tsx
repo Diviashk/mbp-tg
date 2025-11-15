@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { HomeScreen } from './components/HomeScreen';
 import { ReportAbsence } from './components/ReportAbsence';
-import { UpdatePreference } from './components/UpdatePreference';
 import { useTelegram } from './hooks/useTelegram';
 import { apiService } from './services/api';
-import { Screen, Employee, ShiftPreference } from './types';
+import { Screen, Employee } from './types';
 
 function App() {
   const { isReady, user, showAlert, hapticFeedback } = useTelegram();
@@ -29,29 +28,7 @@ function App() {
         setError(null);
       } catch (err) {
         console.error('Failed to load employee:', err);
-        // For demo purposes, create a mock employee
-        setEmployee({
-          id: 'demo-' + user.id,
-          telegramUserId: user.id,
-          name: user.first_name,
-          upcomingShifts: [
-            {
-              id: '1',
-              date: new Date(Date.now() + 86400000).toISOString(),
-              type: 'morning',
-              startTime: '06:00',
-              endTime: '14:00',
-            },
-            {
-              id: '2',
-              date: new Date(Date.now() + 86400000 * 3).toISOString(),
-              type: 'evening',
-              startTime: '14:00',
-              endTime: '22:00',
-            },
-          ],
-        });
-        setError(null); // Clear error since we're using mock data
+        setError('Could not load your employee profile. Please contact your manager to link your Telegram account.');
       } finally {
         setIsLoading(false);
       }
@@ -92,20 +69,6 @@ function App() {
     }
   };
 
-  const handlePreferenceSubmit = async (preferences: ShiftPreference[]) => {
-    if (!employee) return;
-
-    try {
-      await apiService.updatePreferences(employee.id, preferences);
-      
-      showAlert('Preferences updated successfully!');
-      handleBackToHome();
-    } catch (err) {
-      console.error('Failed to update preferences:', err);
-      throw err;
-    }
-  };
-
   // Loading state
   if (!isReady || isLoading) {
     return (
@@ -124,11 +87,20 @@ function App() {
       <div className="min-h-screen bg-tg-bg flex items-center justify-center p-4">
         <div className="max-w-md text-center">
           <div className="text-6xl mb-4">⚠️</div>
-          <h2 className="text-xl font-bold text-tg-text mb-2">Something went wrong</h2>
-          <p className="text-tg-hint mb-4">{error}</p>
+          <h2 className="text-xl font-bold text-tg-text mb-2">Account Not Linked</h2>
+          <p className="text-tg-hint mb-6">{error}</p>
+          <div className="bg-tg-secondary-bg rounded-xl p-4">
+            <p className="text-sm text-tg-text mb-2">
+              <strong>Your Telegram ID:</strong>
+            </p>
+            <p className="text-lg font-mono text-tg-button mb-3">{user?.id}</p>
+            <p className="text-xs text-tg-hint">
+              Share this ID with your manager to link your account.
+            </p>
+          </div>
           <button
             onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-tg-button text-tg-button-text rounded-xl font-medium"
+            className="mt-6 px-6 py-3 bg-tg-button text-tg-button-text rounded-xl font-medium"
           >
             Try Again
           </button>
@@ -151,14 +123,6 @@ function App() {
         <ReportAbsence
           employeeId={employee.id}
           onSubmit={handleAbsenceSubmit}
-          onBack={handleBackToHome}
-        />
-      )}
-      
-      {currentScreen === 'update-preference' && employee && (
-        <UpdatePreference
-          employeeId={employee.id}
-          onSubmit={handlePreferenceSubmit}
           onBack={handleBackToHome}
         />
       )}
