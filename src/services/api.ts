@@ -12,6 +12,35 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl || '', supabaseKey || '');
 
+// Helper: generate comma-separated list of YYYY-MM-DD between start and end (inclusive)
+function datesBetween(startDate: string, endDate: string): string {
+  const s = new Date(startDate);
+  const e = new Date(endDate);
+  const dates: string[] = [];
+  for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    dates.push(`${yyyy}-${mm}-${dd}`);
+  }
+  return dates.join(',');
+}
+
+// Helper: parse comma-separated absence_dates into array and compute start/end
+function parseAbsenceDates(datesCsv: string | null | undefined) {
+  if (!datesCsv) return { dates: [], startDate: null, endDate: null };
+  const parts = datesCsv
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .sort(); // lexicographic YYYY-MM-DD sorts correctly
+  return {
+    dates: parts,
+    startDate: parts.length ? parts[0] : null,
+    endDate: parts.length ? parts[parts.length - 1] : null,
+  };
+}
+
 class ApiService {
   // Employee endpoints
   async getEmployee(telegramUserId: number | string): Promise<Employee> {
@@ -47,21 +76,39 @@ class ApiService {
       throw new Error(error.message || 'Employee not found');
     }
 
-    const assignments = (data as any).shift_assignments || [];
+    const employeeId = (data as any).id;
+    const assignments = ((data as any).shift_assignments || []).filter(
+      (a: any) => a && String(a.employee_id) === String(employeeId)
+    );
 
-    // Flatten nested shifts and compute upcoming shifts
+    // Map assignments -> shifts, preserve assignment-level info and include role fallback
     const upcomingShifts = assignments
-      .flatMap((a: any) => a.shifts || [])
-      .filter((shift: any) => new Date(shift.date) >= new Date())
+      .flatMap((a: any) => {
+        const shifts = a.shifts || [];
+        return shifts.map((shift: any) => ({
+          id: shift.id,
+          date: shift.date,
+          type: shift.shift_type,
+          startTime: shift.start_time,
+          endTime: shift.end_time,
+          // assignment-level metadata
+          assignmentId: a.id,
+          assignedAt: a.assigned_at,
+          assignmentStatus: a.status,
+          skillLevel: a.skill_level,
+          // role: prefer a.role if present, otherwise a.status or 'assigned'
+          role: (a as any).role ?? a.status ?? 'assigned',
+        }));
+      })
+      .filter((shift: any) => {
+        const shiftDate = new Date(shift.date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        shiftDate.setHours(0, 0, 0, 0);
+        return shiftDate >= today;
+      })
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .slice(0, 5)
-      .map((shift: any) => ({
-        id: shift.id,
-        date: shift.date,
-        type: shift.shift_type,
-        startTime: shift.start_time,
-        endTime: shift.end_time,
-      }));
+      .slice(0, 5);
 
     return {
       id: data.id,
@@ -72,31 +119,46 @@ class ApiService {
   }
 
   // Absence endpoints
+  // submitAbsence writes to your existing absences table (month, absence_dates, notes)
   async submitAbsence(absence: Absence): Promise<{ success: boolean; message: string }> {
-    const { data, error } = await supabase
-      .from('absences')
-      .insert({
-        employee_id: absence.employeeId,
-        start_date: absence.startDate,
-        end_date: absence.endDate,
-        reason: absence.reason,
-        custom_reason: absence.customReason,
-        status: 'pending',
-      })
-      .select()
-      .single();
+    // Expect absence to have: employeeId (uuid), startDate (YYYY-MM-DD), endDate (YYYY-MM-DD), reason, customReason
+    try {
+      const start = absence.startDate;
+      const end = absence.endDate ?? absence.startDate;
+      const absenceDates = datesBetween(start, end);
 
-    if (error) {
-      console.error('Error submitting absence:', error);
-      throw new Error(error.message || 'Failed to submit absence');
+      // month stored as first day of month (YYYY-MM-01)
+      const month = `${new Date(start).getFullYear()}-${String(new Date(start).getMonth() + 1).padStart(2, '0')}-01`;
+
+      const notes = absence.customReason || absence.reason || null;
+
+      const { data, error } = await supabase
+        .from('absences')
+        .insert({
+          employee_id: absence.employeeId,
+          month,
+          absence_dates: absenceDates,
+          notes,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error submitting absence:', error);
+        throw new Error(error.message || 'Failed to submit absence');
+      }
+
+      return {
+        success: true,
+        message: 'Absence submitted successfully',
+      };
+    } catch (err: any) {
+      console.error('submitAbsence - unexpected error:', err);
+      throw new Error(err?.message || 'Failed to submit absence');
     }
-
-    return {
-      success: true,
-      message: 'Absence submitted successfully',
-    };
   }
 
+  // getAbsences: returns raw absence_dates and compatibility fields startDate/endDate
   async getAbsences(employeeId: string): Promise<Absence[]> {
     const { data, error } = await supabase
       .from('absences')
@@ -109,15 +171,23 @@ class ApiService {
       throw new Error(error.message || 'Failed to fetch absences');
     }
 
-    return (data || []).map((absence: any) => ({
-      id: absence.id,
-      employeeId: absence.employee_id,
-      startDate: absence.start_date,
-      endDate: absence.end_date,
-      reason: absence.reason,
-      customReason: absence.custom_reason,
-      status: absence.status,
-    }));
+    return (data || []).map((row: any) => {
+      const parsed = parseAbsenceDates(row.absence_dates);
+      return {
+        id: row.id,
+        employeeId: row.employee_id,
+        // compatibility: return first and last date if UI expects start/end
+        startDate: parsed.startDate,
+        endDate: parsed.endDate,
+        // preserve the raw CSV too
+        absenceDates: parsed.dates,
+        // map notes -> reason/customReason fields for compatibility
+        reason: row.notes || null,
+        customReason: row.notes || null,
+        status: row.status || null,
+        createdAt: row.created_at || null,
+      } as Absence;
+    });
   }
 }
 
