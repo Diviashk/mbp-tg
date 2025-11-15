@@ -1,3 +1,4 @@
+// src/services/api.ts
 import { createClient } from '@supabase/supabase-js';
 import { Absence, Employee } from '../types';
 
@@ -13,26 +14,31 @@ const supabase = createClient(supabaseUrl || '', supabaseKey || '');
 
 class ApiService {
   // Employee endpoints
-  // Accept number|string for telegram id
   async getEmployee(telegramUserId: number | string): Promise<Employee> {
     const tgid = String(telegramUserId);
 
     const { data, error } = await supabase
       .from('employees')
-      .select(
-        `
+      .select(`
         id,
         name,
         telegram_user_id,
         shift_assignments (
           id,
+          shift_id,
+          employee_id,
           assigned_at,
-          role,
-          notes,
-          shifts ( id, date, shift_type, start_time, end_time )
+          status,
+          skill_level,
+          shifts (
+            id,
+            date,
+            shift_type,
+            start_time,
+            end_time
+          )
         )
-      `
-      )
+      `)
       .eq('telegram_user_id', tgid)
       .single();
 
@@ -41,9 +47,9 @@ class ApiService {
       throw new Error(error.message || 'Employee not found');
     }
 
-    const assignments = data.shift_assignments || [];
+    const assignments = (data as any).shift_assignments || [];
 
-    // flatten assigned shifts and compute upcoming
+    // Flatten nested shifts and compute upcoming shifts
     const upcomingShifts = assignments
       .flatMap((a: any) => a.shifts || [])
       .filter((shift: any) => new Date(shift.date) >= new Date())
@@ -82,7 +88,7 @@ class ApiService {
 
     if (error) {
       console.error('Error submitting absence:', error);
-      throw new Error('Failed to submit absence');
+      throw new Error(error.message || 'Failed to submit absence');
     }
 
     return {
@@ -100,7 +106,7 @@ class ApiService {
 
     if (error) {
       console.error('Error fetching absences:', error);
-      throw new Error('Failed to fetch absences');
+      throw new Error(error.message || 'Failed to fetch absences');
     }
 
     return (data || []).map((absence: any) => ({
