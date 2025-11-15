@@ -115,7 +115,7 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-tg-bg text-tg-text p-4 pb-8">
+ <div className="min-h-full h-full bg-tg-bg text-tg-text p-4 pb-24 overflow-y-auto">
       <div className="max-w-md mx-auto space-y-6">
         {/* Header */}
         <div className="pt-4 pb-2">
