@@ -13,23 +13,39 @@ const supabase = createClient(supabaseUrl || '', supabaseKey || '');
 
 class ApiService {
   // Employee endpoints
-  async getEmployee(telegramUserId: number): Promise<Employee> {
+  // Accept number|string for telegram id
+  async getEmployee(telegramUserId: number | string): Promise<Employee> {
+    const tgid = String(telegramUserId);
+
     const { data, error } = await supabase
       .from('employees')
-      .select(`
-        *,
-        shifts:shifts(*)
-      `)
-     .eq('telegram_user_id', String(telegramUserId))
+      .select(
+        `
+        id,
+        name,
+        telegram_user_id,
+        shift_assignments (
+          id,
+          assigned_at,
+          role,
+          notes,
+          shifts ( id, date, shift_type, start_time, end_time )
+        )
+      `
+      )
+      .eq('telegram_user_id', tgid)
       .single();
 
     if (error) {
-      console.error('Error fetching employee:', error);
-      throw new Error('Employee not found');
+      console.error('Error fetching employee assignments:', error);
+      throw new Error(error.message || 'Employee not found');
     }
 
-    // Transform upcoming shifts
-    const upcomingShifts = (data.shifts || [])
+    const assignments = data.shift_assignments || [];
+
+    // flatten assigned shifts and compute upcoming
+    const upcomingShifts = assignments
+      .flatMap((a: any) => a.shifts || [])
       .filter((shift: any) => new Date(shift.date) >= new Date())
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(0, 5)
@@ -87,7 +103,7 @@ class ApiService {
       throw new Error('Failed to fetch absences');
     }
 
-    return (data || []).map(absence => ({
+    return (data || []).map((absence: any) => ({
       id: absence.id,
       employeeId: absence.employee_id,
       startDate: absence.start_date,
