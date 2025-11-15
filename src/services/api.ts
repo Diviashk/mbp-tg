@@ -153,13 +153,12 @@ class ApiService {
           ? `${existing.notes}; ${notes}` 
           : notes;
 
-        // UPDATE existing record
+        // UPDATE existing record (without updated_at)
         const { error: updateError } = await supabase
           .from("employee_availability")
           .update({
             absence_dates: mergedDates,
-            notes: combinedNotes,
-            updated_at: new Date().toISOString()
+            notes: combinedNotes
           })
           .eq("id", existing.id);
 
@@ -168,7 +167,7 @@ class ApiService {
           throw new Error(updateError.message);
         }
 
-        return { success: true, message: "Absence dates added to existing record" };
+        return { success: true, message: "Absence dates added successfully" };
 
       } else {
         // No existing record - INSERT new one
