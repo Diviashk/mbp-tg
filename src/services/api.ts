@@ -115,33 +115,80 @@ class ApiService {
 
   // ======================================
   // SUBMIT ABSENCE TO employee_availability
+  // WITH UPSERT (merge with existing dates)
   // ======================================
   async submitAbsence(absence: Absence) {
     try {
       const start = absence.startDate;
       const end = absence.endDate ?? absence.startDate;
 
-      const absenceDates = datesBetween(start, end);
+      const newDates = datesBetween(start, end);
       const month = `${start.slice(0, 7)}-01`;
       const notes = absence.customReason || absence.reason || null;
 
-      const { error } = await supabase
+      // First, check if record exists for this employee+month
+      const { data: existing, error: fetchError } = await supabase
         .from("employee_availability")
-        .insert({
-          employee_id: absence.employeeId,
-          month,
-          absence_dates: absenceDates,
-          notes
-        })
-        .select()
-        .single();
+        .select("id, absence_dates, notes")
+        .eq("employee_id", absence.employeeId)
+        .eq("month", month)
+        .maybeSingle();
 
-      if (error) {
-        console.error("Submit absence error:", error);
-        throw new Error(error.message);
+      if (fetchError) {
+        console.error("Error checking existing record:", fetchError);
+        throw new Error(fetchError.message);
       }
 
-      return { success: true, message: "Absence submitted successfully" };
+      if (existing) {
+        // Record exists - MERGE dates
+        const existingDates = existing.absence_dates ? existing.absence_dates.split(",").map(d => d.trim()) : [];
+        const newDatesList = newDates.split(",").map(d => d.trim());
+        
+        // Combine and remove duplicates
+        const mergedDatesSet = new Set([...existingDates, ...newDatesList]);
+        const mergedDates = Array.from(mergedDatesSet).sort().join(",");
+        
+        // Combine notes
+        const combinedNotes = existing.notes 
+          ? `${existing.notes}; ${notes}` 
+          : notes;
+
+        // UPDATE existing record
+        const { error: updateError } = await supabase
+          .from("employee_availability")
+          .update({
+            absence_dates: mergedDates,
+            notes: combinedNotes,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", existing.id);
+
+        if (updateError) {
+          console.error("Error updating absence:", updateError);
+          throw new Error(updateError.message);
+        }
+
+        return { success: true, message: "Absence dates added to existing record" };
+
+      } else {
+        // No existing record - INSERT new one
+        const { error: insertError } = await supabase
+          .from("employee_availability")
+          .insert({
+            employee_id: absence.employeeId,
+            month,
+            absence_dates: newDates,
+            notes
+          });
+
+        if (insertError) {
+          console.error("Error inserting absence:", insertError);
+          throw new Error(insertError.message);
+        }
+
+        return { success: true, message: "Absence submitted successfully" };
+      }
+
     } catch (err: any) {
       console.error("Unexpected absence submit error:", err);
       throw err;
