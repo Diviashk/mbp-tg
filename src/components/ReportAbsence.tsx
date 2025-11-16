@@ -38,13 +38,25 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
   const [customReason, setCustomReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Expand Telegram viewport on mount
+  // Aggressive viewport expansion
   useEffect(() => {
     if (webApp) {
       webApp.expand();
-      if (webApp.enableVerticalSwipes) {
-        webApp.enableVerticalSwipes();
+      webApp.enableClosingConfirmation?.();
+      
+      // Force viewport meta tag update
+      const viewport = document.querySelector('meta[name=viewport]');
+      if (viewport) {
+        viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
       }
+      
+      // Set body styles to ensure scrolling works
+      document.body.style.overflow = 'auto';
+      document.body.style.height = 'auto';
+      document.body.style.minHeight = '100vh';
+      
+      // Scroll to top
+      window.scrollTo(0, 0);
     }
   }, [webApp]);
 
@@ -125,8 +137,15 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-tg-bg text-tg-text p-4 pb-32 overflow-y-auto">
-      <div className="max-w-md mx-auto space-y-6 pb-8">
+    <div 
+      className="bg-tg-bg text-tg-text"
+      style={{ 
+        minHeight: '100vh',
+        paddingBottom: '150px',
+        overflow: 'auto'
+      }}
+    >
+      <div className="max-w-md mx-auto p-4 space-y-6">
         {/* Header */}
         <div className="pt-4 pb-2">
           <h1 className="text-2xl font-bold">📅 Report Absence</h1>
@@ -214,8 +233,8 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
           </div>
         )}
 
-        {/* Extra spacer for Main Button */}
-        <div className="h-20"></div>
+        {/* Large bottom spacer */}
+        <div className="h-32"></div>
       </div>
     </div>
   );
