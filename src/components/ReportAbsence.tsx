@@ -29,7 +29,7 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
   onSubmit,
   onBack,
 }) => {
-  const { showMainButton, hideMainButton, showBackButton, hideBackButton, hapticFeedback, showAlert } = useTelegram();
+  const { showMainButton, hideMainButton, showBackButton, hideBackButton, hapticFeedback, showAlert, webApp } = useTelegram();
   
   const [mode, setMode] = useState<'single' | 'range'>('single');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -37,6 +37,14 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
   const [selectedReason, setSelectedReason] = useState<AbsenceReason | null>(null);
   const [customReason, setCustomReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 🔧 NEW: Expand Telegram viewport on mount
+  useEffect(() => {
+    if (webApp) {
+      webApp.expand();
+      webApp.enableVerticalSwipes?.();
+    }
+  }, [webApp]);
 
   useEffect(() => {
     showBackButton(onBack);
@@ -115,8 +123,9 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
   };
 
   return (
- <div className="min-h-full h-full bg-tg-bg text-tg-text p-4 pb-24 overflow-y-auto">
-      <div className="max-w-md mx-auto space-y-6">
+    {/* 🔧 CHANGED: Added pb-32 for extra bottom padding and safe-bottom */}
+    <div className="min-h-screen bg-tg-bg text-tg-text p-4 pb-32 overflow-y-auto">
+      <div className="max-w-md mx-auto space-y-6 pb-8">
         {/* Header */}
         <div className="pt-4 pb-2">
           <h1 className="text-2xl font-bold">📅 Report Absence</h1>
@@ -187,11 +196,13 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
             <label className="text-sm font-medium text-tg-text">
               Please specify the reason
             </label>
+            {/* 🔧 CHANGED: Fixed rows to 3 instead of min-height */}
             <textarea
               value={customReason}
               onChange={(e) => setCustomReason(e.target.value)}
               placeholder="Enter reason..."
-              className="w-full min-h-[100px] p-4 rounded-xl bg-tg-secondary-bg text-tg-text text-base border-2 border-transparent focus:border-tg-button outline-none resize-none"
+              rows={3}
+              className="w-full p-4 rounded-xl bg-tg-secondary-bg text-tg-text text-base border-2 border-transparent focus:border-tg-button outline-none resize-none"
               style={{ fontSize: '16px' }}
             />
           </div>
@@ -202,6 +213,9 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-tg-hint border-t-tg-button"></div>
           </div>
         )}
+
+        {/* 🔧 NEW: Extra spacer for Main Button */}
+        <div className="h-20"></div>
       </div>
     </div>
   );
