@@ -16,25 +16,19 @@ export const ReasonChip: React.FC<ReasonChipProps> = ({
     <button
       onClick={() => onSelect(reason)}
       className={`
-        min-h-[56px] px-6 py-3 rounded-xl
-        flex items-center gap-3
-        text-base font-medium
+        w-full px-3 py-2 rounded-lg text-sm font-medium
         transition-all duration-200
-        active:scale-95
-        border-2
+        flex items-center gap-2
         ${
           isSelected
-            ? 'bg-tg-button text-tg-button-text border-tg-button shadow-md'
-            : 'bg-tg-secondary-bg text-tg-text border-transparent'
+            ? 'bg-tg-button text-tg-button-text shadow-md'
+            : 'bg-tg-secondary-bg text-tg-text hover:bg-tg-button hover:bg-opacity-10'
         }
       `}
-      style={{
-        touchAction: 'manipulation',
-        WebkitTapHighlightColor: 'transparent',
-      }}
     >
-      <span className="text-2xl">{reason.emoji}</span>
+      <span className="text-base">{reason.emoji}</span>
       <span>{reason.label}</span>
+      {isSelected && <span className="ml-auto">✓</span>}
     </button>
   );
 };
