@@ -38,11 +38,13 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
   const [customReason, setCustomReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 🔧 NEW: Expand Telegram viewport on mount
+  // Expand Telegram viewport on mount
   useEffect(() => {
     if (webApp) {
       webApp.expand();
-      webApp.enableVerticalSwipes?.();
+      if (webApp.enableVerticalSwipes) {
+        webApp.enableVerticalSwipes();
+      }
     }
   }, [webApp]);
 
@@ -123,7 +125,6 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
   };
 
   return (
-    {/* 🔧 CHANGED: Added pb-32 for extra bottom padding and safe-bottom */}
     <div className="min-h-screen bg-tg-bg text-tg-text p-4 pb-32 overflow-y-auto">
       <div className="max-w-md mx-auto space-y-6 pb-8">
         {/* Header */}
@@ -196,7 +197,6 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
             <label className="text-sm font-medium text-tg-text">
               Please specify the reason
             </label>
-            {/* 🔧 CHANGED: Fixed rows to 3 instead of min-height */}
             <textarea
               value={customReason}
               onChange={(e) => setCustomReason(e.target.value)}
@@ -214,7 +214,7 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
           </div>
         )}
 
-        {/* 🔧 NEW: Extra spacer for Main Button */}
+        {/* Extra spacer for Main Button */}
         <div className="h-20"></div>
       </div>
     </div>
