@@ -37,26 +37,29 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
   const [selectedReason, setSelectedReason] = useState<AbsenceReason | null>(null);
   const [customReason, setCustomReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(window.innerHeight);
 
-  // Aggressive viewport expansion
+  // Track viewport height changes
+  useEffect(() => {
+    const handleResize = () => {
+      setViewportHeight(window.innerHeight);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Expand Telegram viewport
   useEffect(() => {
     if (webApp) {
       webApp.expand();
-      webApp.enableClosingConfirmation?.();
       
-      // Force viewport meta tag update
-      const viewport = document.querySelector('meta[name=viewport]');
-      if (viewport) {
-        viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
-      }
+      // Get viewport height from Telegram
+      const tgViewportHeight = webApp.viewportHeight || window.innerHeight;
+      setViewportHeight(tgViewportHeight);
       
-      // Set body styles to ensure scrolling works
-      document.body.style.overflow = 'auto';
-      document.body.style.height = 'auto';
-      document.body.style.minHeight = '100vh';
-      
-      // Scroll to top
-      window.scrollTo(0, 0);
+      console.log('Telegram viewport height:', tgViewportHeight);
+      console.log('Window height:', window.innerHeight);
     }
   }, [webApp]);
 
@@ -138,103 +141,101 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
 
   return (
     <div 
-      className="bg-tg-bg text-tg-text"
+      className="bg-tg-bg text-tg-text overflow-y-auto"
       style={{ 
-        minHeight: '100vh',
-        paddingBottom: '150px',
-        overflow: 'auto'
+        height: `${viewportHeight}px`,
+        maxHeight: `${viewportHeight}px`
       }}
     >
-      <div className="max-w-md mx-auto p-4 space-y-6">
-        {/* Header */}
-        <div className="pt-4 pb-2">
-          <h1 className="text-2xl font-bold">📅 Report Absence</h1>
-          <p className="text-sm text-tg-hint mt-1">
-            Select the date(s) and reason for your absence
-          </p>
-        </div>
+      <div className="p-4 pb-40">
+        <div className="max-w-md mx-auto space-y-6">
+          {/* Header */}
+          <div className="pt-4 pb-2">
+            <h1 className="text-2xl font-bold">📅 Report Absence</h1>
+            <p className="text-sm text-tg-hint mt-1">
+              Select the date(s) and reason for your absence
+            </p>
+          </div>
 
-        {/* Date Mode Toggle */}
-        <div className="bg-tg-secondary-bg rounded-2xl p-2 flex gap-2">
-          <button
-            onClick={() => handleModeChange('single')}
-            className={`
-              flex-1 py-3 rounded-xl font-semibold text-base
-              transition-all duration-200
-              ${
-                mode === 'single'
-                  ? 'bg-tg-button text-tg-button-text shadow-md'
-                  : 'text-tg-text'
-              }
-            `}
-          >
-            📅 Single Day
-          </button>
-          <button
-            onClick={() => handleModeChange('range')}
-            className={`
-              flex-1 py-3 rounded-xl font-semibold text-base
-              transition-all duration-200
-              ${
-                mode === 'range'
-                  ? 'bg-tg-button text-tg-button-text shadow-md'
-                  : 'text-tg-text'
-              }
-            `}
-          >
-            📆 Date Range
-          </button>
-        </div>
+          {/* Date Mode Toggle */}
+          <div className="bg-tg-secondary-bg rounded-2xl p-2 flex gap-2">
+            <button
+              onClick={() => handleModeChange('single')}
+              className={`
+                flex-1 py-3 rounded-xl font-semibold text-base
+                transition-all duration-200
+                ${
+                  mode === 'single'
+                    ? 'bg-tg-button text-tg-button-text shadow-md'
+                    : 'text-tg-text'
+                }
+              `}
+            >
+              📅 Single Day
+            </button>
+            <button
+              onClick={() => handleModeChange('range')}
+              className={`
+                flex-1 py-3 rounded-xl font-semibold text-base
+                transition-all duration-200
+                ${
+                  mode === 'range'
+                    ? 'bg-tg-button text-tg-button-text shadow-md'
+                    : 'text-tg-text'
+                }
+              `}
+            >
+              📆 Date Range
+            </button>
+          </div>
 
-        {/* Calendar */}
-        <CalendarPicker
-          mode={mode}
-          selectedDate={selectedDate}
-          selectedRange={selectedRange}
-          onDateChange={setSelectedDate}
-          onRangeChange={setSelectedRange}
-        />
+          {/* Calendar */}
+          <CalendarPicker
+            mode={mode}
+            selectedDate={selectedDate}
+            selectedRange={selectedRange}
+            onDateChange={setSelectedDate}
+            onRangeChange={setSelectedRange}
+          />
 
-        {/* Reason Selection */}
-        <div>
-          <h2 className="text-lg font-semibold mb-3">Select Reason</h2>
-          <div className="space-y-2">
-            {ABSENCE_REASONS.map((reason) => (
-              <ReasonChip
-                key={reason.id}
-                reason={reason}
-                isSelected={selectedReason?.id === reason.id}
-                onSelect={handleReasonSelect}
+          {/* Reason Selection */}
+          <div>
+            <h2 className="text-lg font-semibold mb-3">Select Reason</h2>
+            <div className="space-y-2">
+              {ABSENCE_REASONS.map((reason) => (
+                <ReasonChip
+                  key={reason.id}
+                  reason={reason}
+                  isSelected={selectedReason?.id === reason.id}
+                  onSelect={handleReasonSelect}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Custom Reason Input */}
+          {selectedReason?.id === 'other' && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-tg-text">
+                Please specify the reason
+              </label>
+              <textarea
+                value={customReason}
+                onChange={(e) => setCustomReason(e.target.value)}
+                placeholder="Enter reason..."
+                rows={3}
+                className="w-full p-4 rounded-xl bg-tg-secondary-bg text-tg-text text-base border-2 border-transparent focus:border-tg-button outline-none resize-none"
+                style={{ fontSize: '16px' }}
               />
-            ))}
-          </div>
+            </div>
+          )}
+
+          {isSubmitting && (
+            <div className="text-center py-4">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-tg-hint border-t-tg-button"></div>
+            </div>
+          )}
         </div>
-
-        {/* Custom Reason Input */}
-        {selectedReason?.id === 'other' && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-tg-text">
-              Please specify the reason
-            </label>
-            <textarea
-              value={customReason}
-              onChange={(e) => setCustomReason(e.target.value)}
-              placeholder="Enter reason..."
-              rows={3}
-              className="w-full p-4 rounded-xl bg-tg-secondary-bg text-tg-text text-base border-2 border-transparent focus:border-tg-button outline-none resize-none"
-              style={{ fontSize: '16px' }}
-            />
-          </div>
-        )}
-
-        {isSubmitting && (
-          <div className="text-center py-4">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-tg-hint border-t-tg-button"></div>
-          </div>
-        )}
-
-        {/* Large bottom spacer */}
-        <div className="h-32"></div>
       </div>
     </div>
   );
