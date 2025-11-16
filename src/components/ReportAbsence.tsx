@@ -17,11 +17,9 @@ interface ReportAbsenceProps {
 }
 
 const ABSENCE_REASONS: AbsenceReason[] = [
-  { id: 'sick', label: 'Sick Leave', emoji: '🤒' },
+  { id: 'sick', label: 'Sick', emoji: '🤒' },
   { id: 'vacation', label: 'Vacation', emoji: '🏖️' },
-  { id: 'family', label: 'Family Emergency', emoji: '👨‍👩‍👧' },
-  { id: 'personal', label: 'Personal Leave', emoji: '🙋' },
-  { id: 'other', label: 'Other', emoji: '✏️' },
+  { id: 'personal', label: 'Personal', emoji: '🙋' },
 ];
 
 export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
@@ -31,9 +29,8 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
 }) => {
   const { showMainButton, hideMainButton, showBackButton, hideBackButton, hapticFeedback, showAlert, webApp } = useTelegram();
   
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedRange, setSelectedRange] = useState<[Date | null, Date | null]>([null, null]);
   const [selectedReason, setSelectedReason] = useState<AbsenceReason | null>(null);
-  const [customReason, setCustomReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -48,8 +45,7 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
   }, [onBack, showBackButton, hideBackButton]);
 
   useEffect(() => {
-    const canSubmit = selectedReason && selectedDate && 
-      (selectedReason.id !== 'other' || customReason.trim());
+    const canSubmit = selectedReason && selectedRange[0] && selectedRange[1];
 
     if (canSubmit) {
       showMainButton('Submit Absence', handleSubmit);
@@ -58,7 +54,7 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
     }
 
     return () => hideMainButton();
-  }, [selectedDate, selectedReason, customReason]);
+  }, [selectedRange, selectedReason]);
 
   const handleReasonSelect = (reason: AbsenceReason) => {
     hapticFeedback.light();
@@ -67,17 +63,12 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
 
   const handleSubmit = async () => {
     if (!selectedReason) {
-      showAlert('Please select a reason for absence');
+      showAlert('Please select a reason');
       return;
     }
 
-    if (!selectedDate) {
-      showAlert('Please select a date');
-      return;
-    }
-
-    if (selectedReason.id === 'other' && !customReason.trim()) {
-      showAlert('Please provide a reason for your absence');
+    if (!selectedRange[0] || !selectedRange[1]) {
+      showAlert('Please select dates');
       return;
     }
 
@@ -85,79 +76,75 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
     hapticFeedback.medium();
 
     try {
-      const startDate = format(selectedDate, 'yyyy-MM-dd');
+      const startDate = format(selectedRange[0], 'yyyy-MM-dd');
+      const endDate = format(selectedRange[1], 'yyyy-MM-dd');
+      
       await onSubmit({
         startDate,
-        endDate: startDate,
+        endDate,
         reason: selectedReason.id,
-        customReason: selectedReason.id === 'other' ? customReason : undefined,
       });
       hapticFeedback.success();
     } catch (error) {
       hapticFeedback.error();
-      showAlert('Failed to submit absence. Please try again.');
+      showAlert('Failed to submit. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-tg-bg text-tg-text p-3">
-      <div className="max-w-md mx-auto space-y-3">
-        {/* Compact Header */}
-        <div className="pt-2 pb-1">
-          <h1 className="text-xl font-bold">📅 Report Absence</h1>
-          <p className="text-xs text-tg-hint">Select date and reason</p>
-        </div>
-
-        {/* Compact Calendar */}
-        <div className="bg-tg-secondary-bg rounded-xl p-2">
-          <CalendarPicker
-            mode="single"
-            selectedDate={selectedDate}
-            selectedRange={[null, null]}
-            onDateChange={setSelectedDate}
-            onRangeChange={() => {}}
-          />
-        </div>
-
-        {/* Compact Reason Selection */}
-        <div>
-          <h2 className="text-sm font-semibold mb-2">Reason</h2>
-          <div className="space-y-1.5">
-            {ABSENCE_REASONS.map((reason) => (
-              <ReasonChip
-                key={reason.id}
-                reason={reason}
-                isSelected={selectedReason?.id === reason.id}
-                onSelect={handleReasonSelect}
-              />
-            ))}
+    <div className="h-screen bg-tg-bg text-tg-text flex flex-col">
+      <div className="flex-1 overflow-y-auto p-3 pb-20">
+        <div className="max-w-md mx-auto space-y-2">
+          {/* Ultra Compact Header */}
+          <div className="pb-1">
+            <h1 className="text-lg font-bold">📅 Report Absence</h1>
           </div>
-        </div>
 
-        {/* Compact Custom Reason Input */}
-        {selectedReason?.id === 'other' && (
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-tg-text">
-              Specify reason
-            </label>
-            <textarea
-              value={customReason}
-              onChange={(e) => setCustomReason(e.target.value)}
-              placeholder="Enter reason..."
-              rows={2}
-              className="w-full p-2 rounded-lg bg-tg-secondary-bg text-tg-text text-sm border-2 border-transparent focus:border-tg-button outline-none resize-none"
-              style={{ fontSize: '14px' }}
+          {/* Ultra Compact Calendar */}
+          <div className="bg-tg-secondary-bg rounded-lg p-1.5">
+            <CalendarPicker
+              mode="range"
+              selectedDate={null}
+              selectedRange={selectedRange}
+              onDateChange={() => {}}
+              onRangeChange={setSelectedRange}
             />
           </div>
-        )}
 
-        {isSubmitting && (
-          <div className="text-center py-2">
-            <div className="inline-block animate-spin rounded-full h-6 w-6 border-4 border-tg-hint border-t-tg-button"></div>
+          {/* Compact Reason Selection */}
+          <div>
+            <h2 className="text-xs font-semibold mb-1.5 text-tg-hint">Select Reason</h2>
+            <div className="grid grid-cols-3 gap-1.5">
+              {ABSENCE_REASONS.map((reason) => (
+                <button
+                  key={reason.id}
+                  onClick={() => handleReasonSelect(reason)}
+                  className={`
+                    px-2 py-2 rounded-lg text-xs font-medium
+                    transition-all duration-200
+                    flex flex-col items-center gap-1
+                    ${
+                      selectedReason?.id === reason.id
+                        ? 'bg-tg-button text-tg-button-text shadow-md'
+                        : 'bg-tg-secondary-bg text-tg-text'
+                    }
+                  `}
+                >
+                  <span className="text-xl">{reason.emoji}</span>
+                  <span className="text-[10px]">{reason.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+
+          {isSubmitting && (
+            <div className="text-center py-2">
+              <div className="inline-block animate-spin rounded-full h-5 w-5 border-4 border-tg-hint border-t-tg-button"></div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
