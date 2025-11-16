@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CalendarPicker } from './ui/CalendarPicker';
 import { ReasonChip } from './ui/ReasonChip';
 import { AbsenceReason } from '../types';
@@ -37,29 +37,40 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
   const [selectedReason, setSelectedReason] = useState<AbsenceReason | null>(null);
   const [customReason, setCustomReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [viewportHeight, setViewportHeight] = useState(window.innerHeight);
+  
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Track viewport height changes
-  useEffect(() => {
-    const handleResize = () => {
-      setViewportHeight(window.innerHeight);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Expand Telegram viewport
+  // CRITICAL: Enable scrolling in Telegram
   useEffect(() => {
     if (webApp) {
       webApp.expand();
+      webApp.disableVerticalSwipes?.(); // DISABLE vertical swipes to allow normal scrolling!
       
-      // Get viewport height from Telegram
-      const tgViewportHeight = webApp.viewportHeight || window.innerHeight;
-      setViewportHeight(tgViewportHeight);
+      // Force scrollable styles
+      document.documentElement.style.overflow = 'auto';
+      document.documentElement.style.height = 'auto';
+      document.body.style.overflow = 'auto';
+      document.body.style.height = 'auto';
+      document.body.style.position = 'relative';
       
-      console.log('Telegram viewport height:', tgViewportHeight);
-      console.log('Window height:', window.innerHeight);
+      // Remove any telegram scroll blocking
+      const style = document.createElement('style');
+      style.textContent = `
+        body {
+          overflow: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+          height: auto !important;
+        }
+        html {
+          overflow: auto !important;
+          height: auto !important;
+        }
+        #root {
+          overflow: visible !important;
+          height: auto !important;
+        }
+      `;
+      document.head.appendChild(style);
     }
   }, [webApp]);
 
@@ -141,13 +152,16 @@ export const ReportAbsence: React.FC<ReportAbsenceProps> = ({
 
   return (
     <div 
-      className="bg-tg-bg text-tg-text overflow-y-auto"
-      style={{ 
-        height: `${viewportHeight}px`,
-        maxHeight: `${viewportHeight}px`
+      ref={containerRef}
+      style={{
+        overflow: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        height: '100vh',
+        position: 'relative'
       }}
+      className="bg-tg-bg text-tg-text"
     >
-      <div className="p-4 pb-40">
+      <div style={{ paddingBottom: '200px' }} className="p-4">
         <div className="max-w-md mx-auto space-y-6">
           {/* Header */}
           <div className="pt-4 pb-2">
