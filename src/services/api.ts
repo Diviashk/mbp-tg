@@ -18,7 +18,7 @@ function datesBetween(start: string, end: string) {
     const dd = String(d.getDate()).padStart(2, "0");
     out.push(`${yyyy}-${mm}-${dd}`);
   }
-  return out.join(",");
+  return out;
 }
 
 // Helper: local time formatting
@@ -35,6 +35,21 @@ function parseAbsenceDates(csv: string | null) {
   if (!csv) return { dates: [], startDate: null, endDate: null };
   const parts = csv.split(",").map(s => s.trim()).filter(Boolean).sort();
   return { dates: parts, startDate: parts[0], endDate: parts[parts.length - 1] };
+}
+
+// NEW: Format date to YYYY-MM-DD
+function formatDateISO(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+interface ShiftData {
+  date: string;
+  shift_type: 'morning' | 'evening' | null;
+  status: 'scheduled' | 'absent' | 'available';
+  note?: string;
 }
 
 class ApiService {
@@ -113,6 +128,114 @@ class ApiService {
     };
   }
 
+  // ================================
+  // NEW: GET WEEK SHIFTS + ABSENCES
+  // ================================
+  async getWeekShifts(
+    employeeId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<Record<string, ShiftData>> {
+    try {
+      console.log("📅 Fetching week shifts for:", employeeId, startDate, endDate);
+
+      // Get all shifts for employee in date range
+      const { data: shiftsData, error: shiftsError } = await supabase
+        .from("shift_assignments")
+        .select(`
+          id,
+          status,
+          shifts (
+            id,
+            date,
+            shift_type,
+            start_time,
+            end_time
+          )
+        `)
+        .eq("employee_id", employeeId)
+        .gte("shifts.date", startDate)
+        .lte("shifts.date", endDate);
+
+      if (shiftsError) {
+        console.error("❌ Error fetching shifts:", shiftsError);
+        throw shiftsError;
+      }
+
+      // Get all absences for this employee (all months)
+      const { data: absencesData, error: absencesError } = await supabase
+        .from("employee_availability")
+        .select("absence_dates, notes")
+        .eq("employee_id", employeeId);
+
+      if (absencesError) {
+        console.error("❌ Error fetching absences:", absencesError);
+        throw absencesError;
+      }
+
+      // Build absence dates set
+      const absenceDatesSet = new Set<string>();
+      const absenceNotes: Record<string, string> = {};
+
+      absencesData?.forEach((record: any) => {
+        if (record.absence_dates) {
+          const dates = record.absence_dates.split(",").map((d: string) => d.trim());
+          dates.forEach((date: string) => {
+            absenceDatesSet.add(date);
+            if (record.notes) {
+              absenceNotes[date] = record.notes;
+            }
+          });
+        }
+      });
+
+      console.log("📅 Absence dates found:", Array.from(absenceDatesSet));
+
+      // Build calendar data
+      const calendarData: Record<string, ShiftData> = {};
+
+      // Generate all dates in range
+      const datesList = datesBetween(startDate, endDate);
+      datesList.forEach((date: string) => {
+        calendarData[date] = {
+          date,
+          shift_type: null,
+          status: 'available',
+          note: undefined
+        };
+      });
+
+      // Add shifts
+      shiftsData?.forEach((assignment: any) => {
+        const shift = assignment.shifts;
+        if (shift?.date) {
+          calendarData[shift.date] = {
+            date: shift.date,
+            shift_type: (shift.shift_type?.toLowerCase() as 'morning' | 'evening') || null,
+            status: 'scheduled',
+            note: undefined
+          };
+        }
+      });
+
+      // Add absences (overwrite if shift exists)
+      absenceDatesSet.forEach((date: string) => {
+        if (calendarData[date]) {
+          calendarData[date].status = 'absent';
+          calendarData[date].shift_type = null;
+          calendarData[date].note = absenceNotes[date];
+        }
+      });
+
+      console.log("✅ Calendar data ready:", calendarData);
+      return calendarData;
+
+    } catch (error: any) {
+      console.error("💥 Error in getWeekShifts:", error);
+      throw error;
+    }
+  }
+
   // ======================================
   // SUBMIT ABSENCE TO employee_availability
   // WITH DETAILED LOGGING
@@ -129,7 +252,8 @@ class ApiService {
       const start = absence.startDate;
       const end = absence.endDate ?? absence.startDate;
 
-      const newDates = datesBetween(start, end);
+      const newDatesArray = datesBetween(start, end);
+      const newDates = newDatesArray.join(",");
       const month = `${start.slice(0, 7)}-01`;
       const notes = absence.customReason || absence.reason || null;
 
@@ -159,13 +283,12 @@ class ApiService {
         
         // Record exists - MERGE dates
         const existingDates = existing.absence_dates ? existing.absence_dates.split(",").map(d => d.trim()) : [];
-        const newDatesList = newDates.split(",").map(d => d.trim());
         
         console.log("Existing dates:", existingDates);
-        console.log("New dates:", newDatesList);
+        console.log("New dates:", newDatesArray);
         
         // Combine and remove duplicates
-        const mergedDatesSet = new Set([...existingDates, ...newDatesList]);
+        const mergedDatesSet = new Set([...existingDates, ...newDatesArray]);
         const mergedDates = Array.from(mergedDatesSet).sort().join(",");
         
         console.log("Merged dates:", mergedDates);
