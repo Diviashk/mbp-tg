@@ -112,6 +112,7 @@ export function HomeScreen({ employee, onNavigate }: HomeScreenProps) {
   const weekStart = formatDateISO(currentWeekStart);
   const weekEnd = formatDateISO(new Date(currentWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000));
 
+  // Detail View
   if (showDetail && selectedDate) {
     const dayData = shiftData[selectedDate];
     const date = new Date(selectedDate + 'T00:00:00');
@@ -179,6 +180,7 @@ export function HomeScreen({ employee, onNavigate }: HomeScreenProps) {
     );
   }
 
+  // Week View
   return (
     <div className="app-container flex flex-col min-h-screen bg-gradient-to-br from-purple-900 via-gray-900 to-gray-900">
       {/* Header */}
@@ -211,7 +213,6 @@ export function HomeScreen({ employee, onNavigate }: HomeScreenProps) {
         {employee && (
           <div className="bg-white/10 backdrop-blur-sm p-2 rounded-lg text-xs">
             <p className="font-semibold">{employee.name}</p>
-            <p className="text-purple-200">{employee.phone}</p>
           </div>
         )}
       </div>
